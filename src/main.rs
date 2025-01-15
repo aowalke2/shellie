@@ -15,7 +15,10 @@ fn main() {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                        executables.insert(file_name.to_string(), directory_path);
+                        executables
+                            .entry(file_name.to_string())
+                            .or_insert(vec![])
+                            .push(directory_path);
                     }
                 }
             }
@@ -69,7 +72,7 @@ fn main() {
                 }
 
                 if let Some(path) = executables.get(argument) {
-                    println!("{} is {}", argument, path);
+                    println!("{} is {:?}", argument, path);
                     continue;
                 }
                 println!("{}: not found", argument);
