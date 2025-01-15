@@ -1,40 +1,21 @@
-use std::collections::HashMap;
 use std::io::{self, Write};
 use std::{env, fs, process};
 
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type"];
 
 fn main() {
+    let stdin = io::stdin();
     let path_var = env::var("PATH").expect("PATH variable not found");
-    let mut executables = HashMap::new();
-    let paths = path_var.split(":").collect::<Vec<&str>>();
-    for directory_path in paths {
-        if let Ok(directory) = fs::read_dir(directory_path) {
-            for entry in directory {
-                if let Ok(entry) = entry {
-                    let path = entry.path();
-                    if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                        executables
-                            .entry(file_name.to_string())
-                            .or_insert(vec![])
-                            .push(format!("{}/{}", directory_path, file_name));
-                    }
-                }
-            }
-        }
-    }
 
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
-        let stdin = io::stdin();
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
         let tokens = input
-            .trim()
-            .split(" ")
+            .split_whitespace()
             .map(|t| t.to_string())
             .collect::<Vec<String>>();
         match tokens[0].as_str() {
@@ -64,25 +45,21 @@ fn main() {
                     continue;
                 }
 
-                let argument = &tokens[1];
-                if BUILTINS.contains(&argument.as_str()) {
-                    println!("{} is a shell builtin", argument);
+                let command = &tokens[1];
+                if BUILTINS.contains(&command.as_str()) {
+                    println!("{} is a shell builtin", command);
                     continue;
                 }
 
-                if let Some(paths) = executables.get(argument) {
-                    let mut path_index = 0;
-                    let mut max = 0;
-                    for i in 0..paths.len() {
-                        if max < paths[i].chars().count() {
-                            max = paths[i].chars().count();
-                            path_index = i
-                        }
-                    }
-                    println!("{} is {}", argument, paths[path_index]);
+                let paths = &mut path_var.split(":");
+                if let Some(path) =
+                    paths.find(|path| fs::metadata(format!("{path}/{command}")).is_ok())
+                {
+                    println!("{command} is {path}/{command}");
                     continue;
                 }
-                println!("{}: not found", argument);
+
+                println!("{}: not found", command);
             }
             _ => println!("{}: command not found", input.trim()),
         }
