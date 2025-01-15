@@ -1,11 +1,12 @@
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::process::Command;
 use std::{env, fs, process};
 
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type"];
 
 fn main() {
-    let path_var = env::var("PATH").expect("PATH variable not found");
+    let path_var = env::var("PATH").unwrap();
 
     loop {
         print!("$ ");
@@ -64,16 +65,30 @@ fn main() {
                 println!("{}: not found", command);
             }
             _ => {
-                let output = Command::new(tokens[0]).args(tokens[1..].to_vec()).output();
-                match output {
-                    Ok(output) => {
-                        let result = match output.status.success() {
-                            true => String::from_utf8_lossy(&output.stdout),
-                            false => String::from_utf8_lossy(&output.stderr),
-                        };
-                        println!("{}", result)
+                let command = tokens[0];
+                let mut exe = None;
+                for path in env::split_paths(&path_var) {
+                    let exe_path = path.join(command);
+                    if exe_path.exists() {
+                        exe = Some(exe_path)
                     }
-                    Err(_) => println!("{}: command not found", input.trim()),
+                }
+
+                match exe {
+                    Some(command) => {
+                        let output = Command::new(command).args(tokens[1..].to_vec()).output();
+                        match output {
+                            Ok(output) => {
+                                let result = match output.status.success() {
+                                    true => String::from_utf8_lossy(&output.stdout),
+                                    false => String::from_utf8_lossy(&output.stderr),
+                                };
+                                println!("{}", result)
+                            }
+                            Err(_) => println!("{}: command not found", input.trim()),
+                        }
+                    }
+                    None => println!("{}: command not found", command),
                 }
             }
         }
