@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
+use std::process;
 
 fn main() {
     loop {
@@ -11,6 +12,20 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        println!("{}: command not found", input.trim())
+        match input.trim() {
+            input if input.starts_with("exit") => {
+                let tokens = input.split(" ").collect::<Vec<&str>>();
+                if tokens.len() < 2 {
+                    println!("exit command expects integer");
+                    continue;
+                }
+
+                match tokens[1].parse::<i32>() {
+                    Ok(code) => process::exit(code),
+                    Err(_) => println!("exit command expects integer"),
+                }
+            }
+            _ => println!("{}: command not found", input.trim()),
+        }
     }
 }
