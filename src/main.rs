@@ -76,7 +76,7 @@ fn main() {
 
                 match exe {
                     Some(command) => {
-                        let output = Command::new(command).args(tokens[1..].to_vec()).output();
+                        let output = Command::new(tokens[0]).args(tokens[1..].to_vec()).output();
                         match output {
                             Ok(output) => {
                                 let result = match output.status.success() {
