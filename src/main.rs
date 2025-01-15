@@ -70,8 +70,16 @@ fn main() {
                     continue;
                 }
 
-                if let Some(path) = executables.get(argument) {
-                    println!("{} is {:?}", argument, path);
+                if let Some(paths) = executables.get(argument) {
+                    let mut path_index = 0;
+                    let mut max = 0;
+                    for i in 0..paths.len() {
+                        if max < paths[i].chars().count() {
+                            max = paths[i].chars().count();
+                            path_index = i
+                        }
+                    }
+                    println!("{} is {:?}", argument, paths[path_index]);
                     continue;
                 }
                 println!("{}: not found", argument);
