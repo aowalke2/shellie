@@ -17,7 +17,7 @@ fn main() {
                         executables
                             .entry(file_name.to_string())
                             .or_insert(vec![])
-                            .push(directory_path);
+                            .push(format!("{}/{}", directory_path, file_name));
                     }
                 }
             }
