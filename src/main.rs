@@ -16,6 +16,10 @@ fn main() {
         stdin.read_line(&mut input).unwrap();
 
         let tokens = input.split_whitespace().collect::<Vec<&str>>();
+        if tokens.is_empty() {
+            continue;
+        }
+
         match tokens[0] {
             "exit" => {
                 if tokens.len() < 2 {
