@@ -25,6 +25,11 @@ fn main() {
                     Err(_) => println!("exit command expects integer"),
                 }
             }
+            input if input.starts_with("echo") => {
+                let chars = input.chars().collect::<Vec<char>>();
+                let echo = chars[5..].iter().collect::<String>();
+                println!("{}", echo);
+            }
             _ => println!("{}: command not found", input.trim()),
         }
     }
