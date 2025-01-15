@@ -8,7 +8,6 @@ fn main() {
     let path_var = env::var("PATH").expect("PATH variable not found");
     let mut executables = HashMap::new();
     let paths = path_var.split(":").collect::<Vec<&str>>();
-    println!("paths: {:?}", paths);
     for directory_path in paths {
         if let Ok(directory) = fs::read_dir(directory_path) {
             for entry in directory {
