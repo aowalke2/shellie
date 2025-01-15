@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::process::Command;
 use std::{env, fs, process};
 
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type"];
@@ -14,11 +15,8 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        let tokens = input
-            .split_whitespace()
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>();
-        match tokens[0].as_str() {
+        let tokens = input.split_whitespace().collect::<Vec<&str>>();
+        match tokens[0] {
             "exit" => {
                 if tokens.len() < 2 {
                     println!("exit command expects integer");
@@ -46,7 +44,7 @@ fn main() {
                 }
 
                 let command = &tokens[1];
-                if BUILTINS.contains(&command.as_str()) {
+                if BUILTINS.contains(&command) {
                     println!("{} is a shell builtin", command);
                     continue;
                 }
@@ -61,7 +59,19 @@ fn main() {
 
                 println!("{}: not found", command);
             }
-            _ => println!("{}: command not found", input.trim()),
+            _ => {
+                let output = Command::new(tokens[0]).args(tokens[1..].to_vec()).output();
+                match output {
+                    Ok(output) => {
+                        let result = match output.status.success() {
+                            true => String::from_utf8_lossy(&output.stdout),
+                            false => String::from_utf8_lossy(&output.stderr),
+                        };
+                        println!("{}", result)
+                    }
+                    Err(_) => println!("{}: command not found", input.trim()),
+                }
+            }
         }
     }
 }
