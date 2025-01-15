@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::path::PathBuf;
 use std::process::Command;
 use std::{env, fs, process};
 
@@ -76,17 +75,10 @@ fn main() {
 
                 match exe {
                     Some(_) => {
-                        let output = Command::new(tokens[0]).args(tokens[1..].to_vec()).output();
-                        match output {
-                            Ok(output) => {
-                                let result = match output.status.success() {
-                                    true => String::from_utf8_lossy(&output.stdout),
-                                    false => String::from_utf8_lossy(&output.stderr),
-                                };
-                                println!("{}", result)
-                            }
-                            Err(_) => println!("{}: command not found", input.trim()),
-                        }
+                        Command::new(tokens[0])
+                            .args(tokens[1..].to_vec())
+                            .status()
+                            .expect("");
                     }
                     None => println!("{}: command not found", command),
                 }
