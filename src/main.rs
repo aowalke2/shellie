@@ -79,7 +79,7 @@ fn main() {
                             path_index = i
                         }
                     }
-                    println!("{} is {:?}", argument, paths[path_index]);
+                    println!("{} is {}", argument, paths[path_index]);
                     continue;
                 }
                 println!("{}: not found", argument);
