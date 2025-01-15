@@ -5,13 +5,13 @@ use std::{env, fs, process};
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type"];
 
 fn main() {
-    let stdin = io::stdin();
     let path_var = env::var("PATH").expect("PATH variable not found");
 
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
+        let stdin = io::stdin();
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
