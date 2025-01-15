@@ -1,10 +1,28 @@
+use std::collections::{HashMap, HashSet};
 use std::io::{self, Write};
-use std::process;
+use std::{env, fs, process};
+
+const BUILTINS: &'static [&'static str] = &["exit", "echo", "type"];
 
 fn main() {
-    loop {
-        let builtins = ["exit", "echo", "type"];
+    let path_var = env::var("PATH").expect("PATH variable not found");
+    let mut executables = HashMap::new();
+    let paths = path_var.split(":").collect::<Vec<&str>>();
+    for directory_path in paths {
+        if let Ok(directory) = fs::read_dir(directory_path) {
+            for entry in directory {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                        executables
+                            .insert(file_name.to_string(), path.to_str().unwrap().to_string());
+                    }
+                }
+            }
+        }
+    }
 
+    loop {
         print!("$ ");
         io::stdout().flush().unwrap();
 
@@ -24,10 +42,10 @@ fn main() {
                     continue;
                 }
 
-                match tokens[1].parse::<i32>() {
-                    Ok(code) => process::exit(code),
-                    Err(_) => println!("exit command expects integer"),
-                }
+                let code = tokens[1]
+                    .parse::<i32>()
+                    .expect("exit command expects integer");
+                process::exit(code);
             }
             "echo" => {
                 if tokens.len() < 2 {
@@ -44,13 +62,17 @@ fn main() {
                     continue;
                 }
 
-                let builtin = &tokens[1];
-                if !builtins.contains(&builtin.as_str()) {
-                    println!("{}: not found", builtin);
+                let argument = &tokens[1];
+                if BUILTINS.contains(&argument.as_str()) {
+                    println!("{} is a shell builtin", argument);
                     continue;
                 }
 
-                println!("{} is a shell builtin", builtin);
+                if let Some(path) = executables.get(argument) {
+                    println!("{} is {}", argument, path);
+                    continue;
+                }
+                println!("{}: not found", argument);
             }
             _ => println!("{}: command not found", input.trim()),
         }
