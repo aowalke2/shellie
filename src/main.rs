@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::{env, fs, process};
 
@@ -14,8 +14,7 @@ fn main() {
                 if let Ok(entry) = entry {
                     let path = entry.path();
                     if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
-                        executables
-                            .insert(file_name.to_string(), path.to_str().unwrap().to_string());
+                        executables.insert(file_name.to_string(), directory_path);
                     }
                 }
             }
