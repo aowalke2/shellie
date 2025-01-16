@@ -2,7 +2,7 @@ use std::io::{self, Write};
 use std::process::Command;
 use std::{env, fs, process};
 
-const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd"];
+const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd", "cd"];
 
 #[derive(Debug, Clone)]
 pub enum CommandType {
@@ -10,6 +10,7 @@ pub enum CommandType {
     Echo,
     Type,
     Pwd,
+    Cd,
     External(String),
 }
 
@@ -20,6 +21,7 @@ impl From<&str> for CommandType {
             "echo" => CommandType::Echo,
             "type" => CommandType::Type,
             "pwd" => CommandType::Pwd,
+            "cd" => CommandType::Cd,
             _ => CommandType::External(value.to_string()),
         }
     }
@@ -82,6 +84,10 @@ impl ShellCommand {
             CommandType::Pwd => match env::current_dir() {
                 Ok(path) => println!("{}", path.display()),
                 Err(_) => println!("could not retreive working directory"),
+            },
+            CommandType::Cd => match env::set_current_dir(self.arguments[0].as_str()) {
+                Ok(_) => {}
+                Err(_) => println!("cd: {}: No such file or directory", self.arguments[0]),
             },
             CommandType::External(command) => {
                 let mut executable = None;
