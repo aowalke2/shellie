@@ -86,7 +86,11 @@ impl ShellCommand {
                 Err(_) => println!("could not retreive working directory"),
             },
             CommandType::Cd => {
-                if env::set_current_dir(self.arguments[0].as_str()).is_err() {
+                let path = match self.arguments[0] == "~" {
+                    true => env::var("HOME").unwrap(),
+                    false => self.arguments[0].clone(),
+                };
+                if env::set_current_dir(path).is_err() {
                     println!("cd: {}: No such file or directory", self.arguments[0])
                 }
             }
