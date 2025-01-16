@@ -85,10 +85,11 @@ impl ShellCommand {
                 Ok(path) => println!("{}", path.display()),
                 Err(_) => println!("could not retreive working directory"),
             },
-            CommandType::Cd => match env::set_current_dir(self.arguments[0].as_str()) {
-                Ok(_) => {}
-                Err(_) => println!("cd: {}: No such file or directory", self.arguments[0]),
-            },
+            CommandType::Cd => {
+                if env::set_current_dir(self.arguments[0].as_str()).is_err() {
+                    println!("cd: {}: No such file or directory", self.arguments[0])
+                }
+            }
             CommandType::External(command) => {
                 let mut executable = None;
                 for path in env::split_paths(&path_variable) {
