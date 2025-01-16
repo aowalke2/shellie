@@ -79,7 +79,10 @@ impl ShellCommand {
 
                 println!("{}: not found", command);
             }
-            CommandType::Pwd => todo!(),
+            CommandType::Pwd => match env::current_dir() {
+                Ok(path) => println!("{}", path.display()),
+                Err(_) => println!("could not retreive working directory"),
+            },
             CommandType::External(command) => {
                 let mut executable = None;
                 for path in env::split_paths(&path_variable) {
