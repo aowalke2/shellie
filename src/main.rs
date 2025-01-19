@@ -1,3 +1,4 @@
+use regex::Regex;
 use std::io::{self, Write};
 use std::process::Command;
 use std::{env, fs, process};
@@ -29,14 +30,14 @@ impl From<&str> for CommandType {
 
 pub struct ShellCommand {
     command_type: CommandType,
-    arguments: Vec<String>,
+    arguments: String,
 }
 
 impl ShellCommand {
-    pub fn new(command: &str, arguments: Vec<String>) -> ShellCommand {
+    pub fn new(command: &str, arguments: &str) -> ShellCommand {
         ShellCommand {
             command_type: CommandType::from(command),
-            arguments,
+            arguments: arguments.to_string(),
         }
     }
 
@@ -47,7 +48,7 @@ impl ShellCommand {
                     println!("exit command expects integer");
                 }
 
-                match self.arguments[0].parse::<i32>() {
+                match self.arguments.parse::<i32>() {
                     Ok(code) => process::exit(code),
                     Err(_) => println!("exit command expects integer"),
                 }
@@ -57,15 +58,28 @@ impl ShellCommand {
                     println!();
                 }
 
-                let echo = self.arguments.join(" ");
-                println!("{}", echo);
+                let arguments = if (self.arguments.starts_with('\'')
+                    && self.arguments.ends_with('\''))
+                    || (self.arguments.starts_with('\'') && self.arguments.ends_with('\''))
+                {
+                    self.arguments
+                        .chars()
+                        .filter(|c| *c != '\'' && *c != '"')
+                        .collect()
+                } else {
+                    self.arguments
+                        .split_whitespace()
+                        .collect::<Vec<&str>>()
+                        .join(" ")
+                };
+                println!("{}", arguments);
             }
             CommandType::Type => {
                 if self.arguments.is_empty() {
                     println!("exit command expects argument");
                 }
 
-                let command = &self.arguments[0];
+                let command = &self.arguments;
                 if BUILTINS.contains(&command.as_str()) {
                     println!("{} is a shell builtin", command);
                     return;
@@ -86,12 +100,12 @@ impl ShellCommand {
                 Err(_) => println!("could not retreive working directory"),
             },
             CommandType::Cd => {
-                let path = match self.arguments[0] == "~" {
+                let path = match self.arguments == "~" {
                     true => env::var("HOME").unwrap(),
-                    false => self.arguments[0].clone(),
+                    false => self.arguments.clone(),
                 };
                 if env::set_current_dir(path).is_err() {
-                    println!("cd: {}: No such file or directory", self.arguments[0])
+                    println!("cd: {}: No such file or directory", self.arguments)
                 }
             }
             CommandType::External(command) => {
@@ -103,10 +117,22 @@ impl ShellCommand {
                     }
                 }
 
+                let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap();
+                let mut arguments = Vec::new();
+                for captures in re.captures_iter(&self.arguments) {
+                    if let Some(single_quoted) = captures.get(1) {
+                        arguments.push(single_quoted.as_str().to_string());
+                    } else if let Some(double_quoted) = captures.get(2) {
+                        arguments.push(double_quoted.as_str().to_string());
+                    } else if let Some(unquoted) = captures.get(3) {
+                        arguments.push(unquoted.as_str().to_string());
+                    }
+                }
+
                 match executable {
                     Some(_) => {
                         Command::new(command)
-                            .args(self.arguments.clone())
+                            .args(arguments)
                             .status()
                             .expect("Unable to run command");
                     }
@@ -128,15 +154,11 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        let tokens = input
-            .split_whitespace()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
-        if tokens.is_empty() {
-            continue;
-        }
-
-        let command = ShellCommand::new(tokens[0].as_str(), tokens[1..].to_vec());
+        let command = if let Some((command, arguments)) = input.trim().split_once(' ') {
+            ShellCommand::new(command, arguments)
+        } else {
+            ShellCommand::new(&input.trim(), "")
+        };
         command.execute(path_variable.clone());
     }
 }
