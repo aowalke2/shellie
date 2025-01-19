@@ -60,7 +60,7 @@ impl ShellCommand {
 
                 let arguments = if (self.arguments.starts_with('\'')
                     && self.arguments.ends_with('\''))
-                    || (self.arguments.starts_with('\'') && self.arguments.ends_with('\''))
+                    || (self.arguments.starts_with('"') && self.arguments.ends_with('"'))
                 {
                     self.arguments
                         .chars()
