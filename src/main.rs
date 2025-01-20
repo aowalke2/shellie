@@ -1,7 +1,8 @@
-use regex::Regex;
 use std::io::{self, Write};
 use std::process::Command;
 use std::{env, fs, process};
+
+use regex::Regex;
 
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd", "cd"];
 
@@ -30,56 +31,32 @@ impl From<&str> for CommandType {
 
 pub struct ShellCommand {
     command_type: CommandType,
-    arguments: String,
+    arguments: Vec<String>,
+    has_quotes: bool,
 }
 
 impl ShellCommand {
-    pub fn new(command: &str, arguments: &str) -> ShellCommand {
+    pub fn new(command: &str, args: &str) -> ShellCommand {
+        let (arguments, has_quotes) = parse_arguments(args);
         ShellCommand {
             command_type: CommandType::from(command),
-            arguments: arguments.to_string(),
+            arguments,
+            has_quotes,
         }
     }
 
     pub fn execute(&self, path_variable: String) {
         match &self.command_type {
-            CommandType::Exit => {
-                if self.arguments.is_empty() {
-                    println!("exit command expects integer");
-                }
-
-                match self.arguments.parse::<i32>() {
-                    Ok(code) => process::exit(code),
-                    Err(_) => println!("exit command expects integer"),
-                }
-            }
-            CommandType::Echo => {
-                if self.arguments.is_empty() {
-                    println!();
-                }
-
-                let arguments = if (self.arguments.starts_with('\'')
-                    && self.arguments.ends_with('\''))
-                    || (self.arguments.starts_with('"') && self.arguments.ends_with('"'))
-                {
-                    self.arguments
-                        .chars()
-                        .filter(|c| *c != '\'' && *c != '"')
-                        .collect()
-                } else {
-                    self.arguments
-                        .split_whitespace()
-                        .collect::<Vec<&str>>()
-                        .join(" ")
-                };
-                println!("{}", arguments);
-            }
+            CommandType::Exit => match self.arguments.join("").parse::<i32>() {
+                Ok(code) => process::exit(code),
+                Err(_) => println!("exit command expects integer"),
+            },
+            CommandType::Echo => match self.has_quotes {
+                true => println!("{}", self.arguments.join("")),
+                false => println!("{}", self.arguments.join(" ")),
+            },
             CommandType::Type => {
-                if self.arguments.is_empty() {
-                    println!("exit command expects argument");
-                }
-
-                let command = &self.arguments;
+                let command = &self.arguments.join("");
                 if BUILTINS.contains(&command.as_str()) {
                     println!("{} is a shell builtin", command);
                     return;
@@ -100,12 +77,13 @@ impl ShellCommand {
                 Err(_) => println!("could not retreive working directory"),
             },
             CommandType::Cd => {
-                let path = match self.arguments == "~" {
+                let argument = self.arguments.join("");
+                let path = match argument == "~" {
                     true => env::var("HOME").unwrap(),
-                    false => self.arguments.clone(),
+                    false => argument.clone(),
                 };
                 if env::set_current_dir(path).is_err() {
-                    println!("cd: {}: No such file or directory", self.arguments)
+                    println!("cd: {}: No such file or directory", argument)
                 }
             }
             CommandType::External(command) => {
@@ -117,22 +95,10 @@ impl ShellCommand {
                     }
                 }
 
-                let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap();
-                let mut arguments = Vec::new();
-                for captures in re.captures_iter(&self.arguments) {
-                    if let Some(single_quoted) = captures.get(1) {
-                        arguments.push(single_quoted.as_str().to_string());
-                    } else if let Some(double_quoted) = captures.get(2) {
-                        arguments.push(double_quoted.as_str().to_string());
-                    } else if let Some(unquoted) = captures.get(3) {
-                        arguments.push(unquoted.as_str().to_string());
-                    }
-                }
-
                 match executable {
                     Some(_) => {
                         Command::new(command)
-                            .args(arguments)
+                            .args(self.arguments.iter().filter(|s| *s != " ").clone())
                             .status()
                             .expect("Unable to run command");
                     }
@@ -159,6 +125,46 @@ fn main() {
         } else {
             ShellCommand::new(&input.trim(), "")
         };
+
         command.execute(path_variable.clone());
     }
+}
+
+fn parse_arguments(args: &str) -> (Vec<String>, bool) {
+    let mut has_quotes = false;
+
+    let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap();
+    let mut fragments = Vec::new();
+    for captures in re.captures_iter(args) {
+        if let Some(single_quoted) = captures.get(1) {
+            fragments.push(single_quoted.as_str().to_string());
+            has_quotes = true;
+        } else if let Some(double_quoted) = captures.get(2) {
+            fragments.push(double_quoted.as_str().to_string());
+            has_quotes = true;
+        } else if let Some(unquoted) = captures.get(3) {
+            fragments.push(unquoted.as_str().to_string());
+        }
+    }
+
+    let re = Regex::new(r#"'\s+'|"\s+""#).unwrap();
+    let mut spaces = Vec::new();
+    for captures in re.captures_iter(args) {
+        if let Some(_) = captures.get(0) {
+            spaces.push(" ".to_string());
+        }
+    }
+
+    let mut arguments = Vec::new();
+    let mut i = 0;
+    let mut j = 0;
+    while i < fragments.len() && j < spaces.len() {
+        arguments.push(fragments[i].clone());
+        arguments.push(spaces[j].clone());
+        i += 1;
+        j += 1;
+    }
+
+    arguments.extend(fragments[j..].iter().cloned());
+    (arguments, has_quotes)
 }
