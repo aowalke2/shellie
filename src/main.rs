@@ -132,19 +132,19 @@ fn main() {
 
 fn parse_arguments(args: &str) -> (Vec<String>, bool) {
     let has_quotes = check_for_quoted_arguments(args);
+
     if !has_quotes && !args.contains('\\') {
         let arguments = parse_unquoted_arguments(args);
         return (arguments, has_quotes);
-    } else if !has_quotes && args.contains('\\') {
-        println!("jere");
-        let arguments = parse_escaped_arguments(args);
-        return (arguments, has_quotes);
-    } else if has_quotes && !args.contains('\\') {
+    }
+
+    if has_quotes && (!args.starts_with('\\') || !args.starts_with('\\')) {
         let arguments = merge_quoted_args_with_spaces(args);
         return (arguments, has_quotes);
-    } else {
-        todo!()
     }
+
+    let arguments = parse_escaped_arguments(args);
+    return (arguments, false);
 }
 
 fn check_for_quoted_arguments(args: &str) -> bool {
