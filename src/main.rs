@@ -131,22 +131,72 @@ fn main() {
 }
 
 fn parse_arguments(args: &str) -> (Vec<String>, bool) {
-    let mut has_quotes = false;
+    let has_quotes = check_for_quoted_arguments(args);
+    if !has_quotes && !args.contains('\\') {
+        let arguments = parse_unquoted_arguments(args);
+        return (arguments, has_quotes);
+    } else if !has_quotes && args.contains('\\') {
+        println!("jere");
+        let arguments = parse_escaped_arguments(args);
+        return (arguments, has_quotes);
+    } else if has_quotes && !args.contains('\\') {
+        let arguments = merge_quoted_args_with_spaces(args);
+        return (arguments, has_quotes);
+    } else {
+        todo!()
+    }
+}
 
-    let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap();
-    let mut fragments = Vec::new();
-    for captures in re.captures_iter(args) {
-        if let Some(single_quoted) = captures.get(1) {
-            fragments.push(single_quoted.as_str().to_string());
-            has_quotes = true;
-        } else if let Some(double_quoted) = captures.get(2) {
-            fragments.push(double_quoted.as_str().to_string());
-            has_quotes = true;
-        } else if let Some(unquoted) = captures.get(3) {
-            fragments.push(unquoted.as_str().to_string());
+fn check_for_quoted_arguments(args: &str) -> bool {
+    let re = Regex::new(r#"'([^']*)'|"([^"]*)""#).unwrap();
+    re.captures_iter(args).count() > 0
+}
+
+fn parse_escaped_arguments(args: &str) -> Vec<String> {
+    let mut arguments = Vec::new();
+    let mut argument = String::new();
+    let mut escaped = false;
+    for c in args.chars() {
+        if c == '\\' {
+            escaped = true
+        } else if escaped {
+            argument.push(c);
+            escaped = false
+        } else if !escaped && c == ' ' {
+            arguments.push(argument);
+            argument = String::new();
+        } else {
+            argument.push(c);
         }
     }
 
+    if !argument.is_empty() {
+        arguments.push(argument);
+    }
+    arguments
+}
+
+fn parse_unquoted_arguments(args: &str) -> Vec<String> {
+    args.split_whitespace().map(|s| s.to_string()).collect()
+}
+
+fn parse_quoted_arguments(args: &str) -> Vec<String> {
+    let re = Regex::new(r#"'([^']*)'|"([^"]*)"|(\S+)"#).unwrap();
+    let mut arguments = Vec::new();
+    for captures in re.captures_iter(args) {
+        if let Some(single_quoted) = captures.get(1) {
+            arguments.push(single_quoted.as_str().to_string());
+        } else if let Some(double_quoted) = captures.get(2) {
+            arguments.push(double_quoted.as_str().to_string());
+        } else if let Some(unquoted) = captures.get(3) {
+            arguments.push(unquoted.as_str().to_string());
+        }
+    }
+
+    arguments
+}
+
+fn parse_spaces_between_quoted_arguments(args: &str) -> Vec<String> {
     let re = Regex::new(r#"'\s+'|"\s+""#).unwrap();
     let mut spaces = Vec::new();
     for captures in re.captures_iter(args) {
@@ -155,16 +205,22 @@ fn parse_arguments(args: &str) -> (Vec<String>, bool) {
         }
     }
 
+    spaces
+}
+
+fn merge_quoted_args_with_spaces(args: &str) -> Vec<String> {
     let mut arguments = Vec::new();
+    let quoted = parse_quoted_arguments(args);
+    let spaces = parse_spaces_between_quoted_arguments(args);
     let mut i = 0;
     let mut j = 0;
-    while i < fragments.len() && j < spaces.len() {
-        arguments.push(fragments[i].clone());
+    while i < quoted.len() && j < spaces.len() {
+        arguments.push(quoted[i].clone());
         arguments.push(spaces[j].clone());
         i += 1;
         j += 1;
     }
 
-    arguments.extend(fragments[j..].iter().cloned());
-    (arguments, has_quotes)
+    arguments.extend(quoted[j..].iter().cloned());
+    arguments
 }
