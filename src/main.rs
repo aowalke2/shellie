@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::io::{self, Write};
 use std::process::Command;
 use std::{env, fs, process};
@@ -42,47 +43,148 @@ impl ShellCommand {
         }
     }
 
-    pub fn execute(&self, path_variable: String) {
-        match &self.command_type {
-            CommandType::Exit => match self.arguments.join(" ").parse::<i32>() {
+    pub fn empty() -> ShellCommand {
+        ShellCommand {
+            command_type: CommandType::Exit,
+            arguments: Vec::new(),
+        }
+    }
+
+    pub fn check_for_redirect(&mut self, stdout: &mut Box<dyn Write>, stderr: &mut Box<dyn Write>) {
+        if self.arguments.len() < 2 {
+            return;
+        }
+
+        let redirect = self.arguments[self.arguments.len() - 2].clone();
+        if redirect != "2>" && redirect != "1>" && redirect != ">" {
+            return;
+        }
+
+        let redirect_file = self.arguments.pop().unwrap();
+        self.arguments.pop().unwrap();
+
+        let file = File::create(redirect_file.as_str()).expect("Unable to create file");
+        if redirect == "1>" || redirect == ">" {
+            *stdout = Box::new(file)
+        } else if redirect == "2>" {
+            *stderr = Box::new(file)
+        }
+    }
+}
+
+pub struct Shell {
+    stdout: Box<dyn Write>,
+    stderr: Box<dyn Write>,
+    path: String,
+    command: ShellCommand,
+}
+
+impl Shell {
+    pub fn new() -> Shell {
+        let path = env::var("PATH").unwrap();
+        Shell {
+            stdout: Box::new(io::stdout()),
+            stderr: Box::new(io::stderr()),
+            path,
+            command: ShellCommand::empty(),
+        }
+    }
+
+    pub fn parse_command(&mut self, input: String) {
+        let mut input_iter = input.trim().chars().peekable();
+        let mut fragment = String::new();
+        let mut command = Vec::new();
+        let mut inside_single_quote = false;
+        let mut inside_double_quote = false;
+
+        while let Some(c) = input_iter.next() {
+            if c == '\'' && !inside_double_quote {
+                inside_single_quote = !inside_single_quote
+            } else if c == '"' && !inside_single_quote {
+                inside_double_quote = !inside_double_quote
+            } else if c == '\\' && !inside_single_quote && !inside_double_quote {
+                let c = input_iter.next().unwrap();
+                fragment.push(c);
+            } else if c == '\\' && inside_double_quote {
+                match input_iter.peek().unwrap() {
+                    '\\' | '$' | '"' => fragment.push(input_iter.next().unwrap()),
+                    _ => fragment.push(c),
+                }
+            } else if c == ' ' && !inside_single_quote && !inside_double_quote {
+                if !fragment.is_empty() {
+                    command.push(fragment);
+                    fragment = String::new();
+                }
+            } else {
+                fragment.push(c);
+            }
+        }
+
+        if !fragment.is_empty() {
+            command.push(fragment);
+        }
+
+        self.command = ShellCommand::new(command);
+        self.command
+            .check_for_redirect(&mut self.stdout, &mut self.stderr);
+    }
+
+    pub fn execute(&mut self) {
+        match &self.command.command_type {
+            CommandType::Exit => match self.command.arguments.join(" ").parse::<i32>() {
                 Ok(code) => process::exit(code),
-                Err(_) => println!("exit command expects integer"),
+                Err(_) => println_output(&mut self.stderr, "command expects an integer"),
             },
-            CommandType::Echo => println!("{}", self.arguments.join(" ")),
+            CommandType::Echo => {
+                println_output(&mut self.stdout, self.command.arguments.join(" ").as_str())
+            }
             CommandType::Type => {
-                let command = &self.arguments.join(" ");
+                let command = &self.command.arguments.join(" ");
+
                 if BUILTINS.contains(&command.as_str()) {
-                    println!("{} is a shell builtin", command);
+                    println_output(
+                        &mut self.stdout,
+                        format!("{} is a shell builtin", command).as_str(),
+                    );
                     return;
                 }
 
-                let paths = &mut path_variable.split(":");
+                let paths = &mut self.path.split(":");
                 if let Some(path) =
                     paths.find(|path| fs::metadata(format!("{path}/{command}")).is_ok())
                 {
-                    println!("{command} is {path}/{command}");
+                    println_output(
+                        &mut self.stdout,
+                        format!("{command} is {path}/{command}").as_str(),
+                    );
                     return;
                 }
 
-                println!("{}: not found", command);
+                println_output(&mut self.stderr, format!("{}: not found", command).as_str());
             }
             CommandType::Pwd => match env::current_dir() {
-                Ok(path) => println!("{}", path.display()),
-                Err(_) => println!("could not retreive working directory"),
+                Ok(path) => {
+                    println_output(&mut self.stdout, format!("{}", path.display()).as_str())
+                }
+                Err(_) => println_output(&mut self.stderr, "could not retreive working directory"),
             },
             CommandType::Cd => {
-                let argument = self.arguments.join(" ");
+                let argument = self.command.arguments.join(" ");
                 let path = match argument == "~" {
                     true => env::var("HOME").unwrap(),
                     false => argument.clone(),
                 };
+
                 if env::set_current_dir(path).is_err() {
-                    println!("cd: {}: No such file or directory", argument)
+                    println_output(
+                        &mut self.stderr,
+                        format!("cd: {}: No such file or directory", argument).as_str(),
+                    );
                 }
             }
             CommandType::External(command) => {
                 let mut executable = None;
-                for path in env::split_paths(&path_variable) {
+                for path in env::split_paths(&self.path) {
                     let exe_path = path.join(&command);
                     if exe_path.exists() {
                         executable = Some(exe_path)
@@ -91,12 +193,17 @@ impl ShellCommand {
 
                 match executable {
                     Some(_) => {
-                        Command::new(command)
-                            .args(self.arguments.clone())
-                            .status()
+                        let output = Command::new(command)
+                            .args(self.command.arguments.clone())
+                            .output()
                             .expect("Unable to run command");
+                        print_output(&mut self.stdout, &String::from_utf8_lossy(&output.stdout));
+                        print_output(&mut self.stderr, &String::from_utf8_lossy(&output.stderr));
                     }
-                    None => println!("{}: command not found", command),
+                    None => println_output(
+                        &mut self.stderr,
+                        format!("{}: command not found", command).as_str(),
+                    ),
                 }
             }
         }
@@ -104,8 +211,6 @@ impl ShellCommand {
 }
 
 fn main() {
-    let path_variable = env::var("PATH").unwrap();
-
     loop {
         print!("$ ");
         io::stdout().flush().unwrap();
@@ -114,49 +219,18 @@ fn main() {
         let mut input = String::new();
         stdin.read_line(&mut input).unwrap();
 
-        let command = parse_command(input);
-        if command.is_empty() {
-            continue;
-        }
-        let command = ShellCommand::new(command);
-
-        command.execute(path_variable.clone());
+        let mut shell = Shell::new();
+        shell.parse_command(input);
+        shell.execute();
     }
 }
 
-fn parse_command(input: String) -> Vec<String> {
-    let mut input_iter = input.trim().chars().peekable();
-    let mut fragment = String::new();
-    let mut command = Vec::new();
-    let mut inside_single_quote = false;
-    let mut inside_double_quote = false;
+fn print_output(output: &mut Box<dyn Write>, message: &str) {
+    write!(output, "{}", message).unwrap();
+    output.flush().unwrap();
+}
 
-    while let Some(c) = input_iter.next() {
-        if c == '\'' && !inside_double_quote {
-            inside_single_quote = !inside_single_quote
-        } else if c == '"' && !inside_single_quote {
-            inside_double_quote = !inside_double_quote
-        } else if c == '\\' && !inside_single_quote && !inside_double_quote {
-            let c = input_iter.next().unwrap();
-            fragment.push(c);
-        } else if c == '\\' && inside_double_quote {
-            match input_iter.peek().unwrap() {
-                '\\' | '$' | '"' => fragment.push(input_iter.next().unwrap()),
-                _ => fragment.push(c),
-            }
-        } else if c == ' ' && !inside_single_quote && !inside_double_quote {
-            if !fragment.is_empty() {
-                command.push(fragment);
-                fragment = String::new();
-            }
-        } else {
-            fragment.push(c);
-        }
-    }
-
-    if !fragment.is_empty() {
-        command.push(fragment);
-    }
-
-    command
+fn println_output(output: &mut Box<dyn Write>, message: &str) {
+    writeln!(output, "{}", message).unwrap();
+    output.flush().unwrap();
 }
