@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{self, Write};
 use std::process::Command;
 use std::{env, fs, process};
@@ -56,17 +56,30 @@ impl ShellCommand {
         }
 
         let redirect = self.arguments[self.arguments.len() - 2].clone();
-        if redirect != "2>" && redirect != "1>" && redirect != ">" {
+        if !["2>", "2>>", "1>", ">", "1>>", ">>"].contains(&redirect.as_str()) {
             return;
         }
 
         let redirect_file = self.arguments.pop().unwrap();
         self.arguments.pop().unwrap();
+        let file = if ["2>", "1>", ">"].contains(&redirect.as_str()) {
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(redirect_file)
+                .expect("Unable to open file")
+        } else {
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .append(true)
+                .open(redirect_file)
+                .expect("Unable to open file")
+        };
 
-        let file = File::create(redirect_file.as_str()).expect("Unable to create file");
-        if redirect == "1>" || redirect == ">" {
+        if ["1>", ">", "1>>", ">>"].contains(&redirect.as_str()) {
             *stdout = Box::new(file)
-        } else if redirect == "2>" {
+        } else if ["2>", "2>>"].contains(&&redirect.as_str()) {
             *stderr = Box::new(file)
         }
     }
