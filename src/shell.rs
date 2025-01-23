@@ -1,7 +1,15 @@
 use std::{
     env, fs,
-    io::{self, Write},
+    io::{self, Stdout, Write},
     process::{self, Command},
+};
+
+use termion::{
+    clear,
+    cursor::{self, DetectCursorPos},
+    event::Key,
+    input::TermRead,
+    raw::RawTerminal,
 };
 
 use crate::{
@@ -31,13 +39,67 @@ impl Shell {
             stdout: Box::new(io::stdout()),
             stderr: Box::new(io::stderr()),
             path,
-            command: ShellCommand::empty(),
+            command: ShellCommand::none(),
             auto_complete,
         }
     }
 
-    pub fn auto_complete(&mut self, input: String) -> Vec<String> {
-        self.auto_complete.auto_complete(&input)
+    pub fn handle_input(&self, stdout: &mut RawTerminal<Stdout>) -> String {
+        let mut input: Vec<char> = Vec::new();
+        write!(stdout, "{}$ ", cursor::Left(10000)).unwrap();
+        stdout.flush().unwrap();
+
+        for key in io::stdin().keys() {
+            match key.unwrap() {
+                Key::Ctrl('c') => process::exit(0),
+                Key::Backspace => {
+                    let cursor_position = stdout.cursor_pos().unwrap();
+                    if cursor_position.0 == 3 {
+                        continue;
+                    }
+
+                    write!(stdout, "{}{}", cursor::Left(1), clear::AfterCursor).unwrap();
+                    stdout.flush().unwrap();
+                    input.pop().unwrap();
+                }
+
+                Key::Char('\t') => {
+                    if input.is_empty() {
+                        continue;
+                    }
+
+                    let prefix = input.iter().collect::<String>();
+                    let suggestions = self.auto_complete.search(&prefix);
+                    if suggestions.is_empty() {
+                        continue;
+                    }
+
+                    write!(
+                        stdout,
+                        "{}{}$ {} ",
+                        clear::CurrentLine,
+                        cursor::Left(1000),
+                        suggestions[0]
+                    )
+                    .unwrap();
+                    input = suggestions[0].chars().collect();
+                    stdout.flush().unwrap();
+                }
+                Key::Char('\n') => {
+                    write!(stdout, "\r\n").unwrap();
+                    break;
+                }
+                Key::Char(c) => {
+                    write!(stdout, "{}", c).unwrap();
+                    stdout.flush().unwrap();
+                    input.push(c);
+                }
+                _ => {}
+            }
+            stdout.flush().unwrap();
+        }
+
+        input.iter().collect()
     }
 
     pub fn parse_command(&mut self, input: String) {
@@ -163,6 +225,8 @@ impl Shell {
             }
             CommandType::None => {}
         }
+
+        self.command = ShellCommand::none();
     }
 }
 

@@ -26,7 +26,7 @@ impl Trie {
         node.end_of_word = true;
     }
 
-    pub fn auto_complete(&self, prefix: &str) -> Vec<String> {
+    pub fn search(&self, prefix: &str) -> Vec<String> {
         let mut node = &self.root;
         let mut suggestions = Vec::new();
         for c in prefix.chars() {
@@ -70,6 +70,6 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        assert_eq!(t.auto_complete("amaz"), check)
+        assert_eq!(t.search("amaz"), check)
     }
 }

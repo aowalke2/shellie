@@ -47,7 +47,7 @@ impl ShellCommand {
         &self.arguments
     }
 
-    pub fn empty() -> ShellCommand {
+    pub fn none() -> ShellCommand {
         ShellCommand {
             command_type: CommandType::None,
             arguments: Vec::new(),
