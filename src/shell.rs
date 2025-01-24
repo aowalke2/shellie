@@ -13,8 +13,8 @@ use termion::{
 };
 
 use crate::{
-    auto_complete::Trie,
     command::{CommandType, ShellCommand},
+    trie::Trie,
 };
 
 const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd", "cd"];

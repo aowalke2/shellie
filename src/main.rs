@@ -1,6 +1,10 @@
 use std::io::{self, Write};
 
-use codecrafters_shell::shell::Shell;
+use shell::Shell;
+
+pub mod command;
+pub mod shell;
+pub mod trie;
 
 fn main() {
     loop {
