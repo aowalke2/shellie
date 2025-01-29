@@ -27,12 +27,13 @@ fn main() {
 
         let input = handle_input(&trie);
 
-        let command = CommandParser::new(input).parse_command().unwrap();
+        let command = CommandParser::new(input).parse_command();
         let mut shell = Shell::new();
         shell.execute(command);
     }
 }
 
+// clean up line reset
 pub fn handle_input(trie: &Trie) -> String {
     let mut stdout = io::stdout().into_raw_mode().unwrap();
     let mut input: Vec<char> = Vec::new();
@@ -71,6 +72,7 @@ pub fn handle_input(trie: &Trie) -> String {
                 )
                 .unwrap();
                 input = suggestions[0].chars().collect();
+                input.push(' ');
                 stdout.flush().unwrap();
             }
             Key::Char('\n') => {
@@ -87,6 +89,5 @@ pub fn handle_input(trie: &Trie) -> String {
         stdout.flush().unwrap();
     }
 
-    stdout.suspend_raw_mode().unwrap();
     input.iter().collect()
 }

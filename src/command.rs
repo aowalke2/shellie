@@ -131,7 +131,7 @@ impl CommandParser {
         CommandParser { input }
     }
 
-    pub fn parse_command(&mut self) -> Result<Command, ParserCommandError> {
+    pub fn parse_command(&mut self) -> Command {
         let mut input_iter = self.input.trim().chars().peekable();
         let mut fragment = String::new();
         let mut command = Vec::new();
@@ -166,18 +166,22 @@ impl CommandParser {
         }
 
         if command.is_empty() {
-            return Err(ParserCommandError::EmptyInput);
+            return Command {
+                name: CommandType::None,
+                arguments: Vec::new(),
+                redirect: None,
+            };
         }
 
-        let name = CommandType::from_str(command[0].as_str())?;
+        let name = CommandType::from_str(command[0].as_str()).unwrap();
         let mut arguments = command[1..].to_vec();
         let redirect = self.try_parse_redirect(&mut arguments);
 
-        Ok(Command {
+        Command {
             name,
             arguments,
             redirect,
-        })
+        }
     }
 
     fn try_parse_redirect(&mut self, arguments: &mut Vec<String>) -> Option<Redirect> {
