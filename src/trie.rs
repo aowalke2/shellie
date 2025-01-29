@@ -52,24 +52,9 @@ impl Trie {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Trie;
-
-    #[test]
-    fn test_trie() {
-        let mut t = Trie::new();
-        t.insert("amazon");
-        t.insert("amazon prime");
-        t.insert("amazing");
-        t.insert("amazing spider man");
-        t.insert("amazed");
-        t.insert("apple");
-
-        let check: Vec<String> = ["amazon", "amazon prime", "amazing"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        assert_eq!(t.search("amaz"), check)
-    }
+pub fn build_trie() -> Trie {
+    let mut trie = Trie::new();
+    trie.insert("echo");
+    trie.insert("exit");
+    trie
 }

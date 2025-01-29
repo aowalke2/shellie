@@ -1,162 +1,60 @@
 use std::{
-    env, fs,
-    io::{self, Stdout, Write},
-    process::{self, Command},
+    env,
+    fs::{self, OpenOptions},
+    io::{self, Write},
+    process::{self},
 };
 
-use termion::{
-    clear,
-    cursor::{self, DetectCursorPos},
-    event::Key,
-    input::TermRead,
-    raw::RawTerminal,
-};
+use crate::command::{Command, CommandType, FileDiscriptor, RedirectType};
 
-use crate::{
-    command::{CommandType, ShellCommand},
-    trie::Trie,
-};
-
-const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd", "cd"];
+pub const BUILTINS: &'static [&'static str] = &["exit", "echo", "type", "pwd", "cd"];
 
 pub struct Shell {
     stdout: Box<dyn Write>,
     stderr: Box<dyn Write>,
     path: String,
-    command: ShellCommand,
-    auto_complete: Trie,
 }
 
 impl Shell {
     pub fn new() -> Shell {
         let path = env::var("PATH").unwrap();
-        let mut auto_complete = Trie::default();
-        for command in BUILTINS {
-            auto_complete.insert(&command);
-        }
 
         Shell {
             stdout: Box::new(io::stdout()),
             stderr: Box::new(io::stderr()),
             path,
-            command: ShellCommand::none(),
-            auto_complete,
         }
     }
 
-    pub fn handle_input(&self, stdout: &mut RawTerminal<Stdout>) -> String {
-        let mut input: Vec<char> = Vec::new();
-        write!(stdout, "{}$ ", cursor::Left(10000)).unwrap();
-        stdout.flush().unwrap();
+    pub fn execute(&mut self, command: Command) {
+        match command.redirect() {
+            Some(redirect) => {
+                let should_append = *redirect.redirect_type() == RedirectType::Append;
+                let file = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .append(should_append)
+                    .open(redirect.file())
+                    .expect("Unable to open file");
 
-        for key in io::stdin().keys() {
-            match key.unwrap() {
-                Key::Ctrl('c') => process::exit(0),
-                Key::Backspace => {
-                    let cursor_position = stdout.cursor_pos().unwrap();
-                    if cursor_position.0 == 3 {
-                        continue;
-                    }
-
-                    write!(stdout, "{}{}", cursor::Left(1), clear::AfterCursor).unwrap();
-                    stdout.flush().unwrap();
-                    input.pop().unwrap();
+                match redirect.file_descriptor() {
+                    FileDiscriptor::Stdout => self.stdout = Box::new(file),
+                    FileDiscriptor::Stderr => self.stderr = Box::new(file),
                 }
-
-                Key::Char('\t') => {
-                    if input.is_empty() {
-                        continue;
-                    }
-
-                    let prefix = input.iter().collect::<String>();
-                    let suggestions = self.auto_complete.search(&prefix);
-                    if suggestions.is_empty() {
-                        continue;
-                    }
-
-                    write!(
-                        stdout,
-                        "{}{}$ {} ",
-                        clear::CurrentLine,
-                        cursor::Left(1000),
-                        suggestions[0]
-                    )
-                    .unwrap();
-                    input = suggestions[0].chars().collect();
-                    stdout.flush().unwrap();
-                }
-                Key::Char('\n') => {
-                    write!(stdout, "\r\n").unwrap();
-                    break;
-                }
-                Key::Char(c) => {
-                    write!(stdout, "{}", c).unwrap();
-                    stdout.flush().unwrap();
-                    input.push(c);
-                }
-                _ => {}
             }
-            stdout.flush().unwrap();
-        }
+            None => {}
+        };
 
-        input.iter().collect()
-    }
-
-    pub fn parse_command(&mut self, input: String) {
-        let mut input_iter = input.trim().chars().peekable();
-        let mut fragment = String::new();
-        let mut command = Vec::new();
-        let mut inside_single_quote = false;
-        let mut inside_double_quote = false;
-
-        while let Some(c) = input_iter.next() {
-            if c == '\'' && !inside_double_quote {
-                inside_single_quote = !inside_single_quote
-            } else if c == '"' && !inside_single_quote {
-                inside_double_quote = !inside_double_quote
-            } else if c == '\\' && !inside_single_quote && !inside_double_quote {
-                let c = input_iter.next().unwrap();
-                fragment.push(c);
-            } else if c == '\\' && inside_double_quote {
-                match input_iter.peek().unwrap() {
-                    '\\' | '$' | '"' => fragment.push(input_iter.next().unwrap()),
-                    _ => fragment.push(c),
-                }
-            } else if c == ' ' && !inside_single_quote && !inside_double_quote {
-                if !fragment.is_empty() {
-                    command.push(fragment);
-                    fragment = String::new();
-                }
-            } else {
-                fragment.push(c);
-            }
-        }
-
-        if !fragment.is_empty() {
-            command.push(fragment);
-        }
-
-        if command.is_empty() {
-            return;
-        }
-
-        self.command = ShellCommand::new(command);
-        self.command
-            .check_for_redirect(&mut self.stdout, &mut self.stderr);
-    }
-
-    pub fn execute(&mut self) {
-        match &self.command.command_type() {
-            CommandType::Exit => match self.command.arguments().join(" ").parse::<i32>() {
+        match command.name() {
+            CommandType::Exit => match command.arguments().join(" ").parse::<i32>() {
                 Ok(code) => process::exit(code),
                 Err(_) => println_output(&mut self.stderr, "command expects an integer"),
             },
-            CommandType::Echo => println_output(
-                &mut self.stdout,
-                self.command.arguments().join(" ").as_str(),
-            ),
+            CommandType::Echo => {
+                println_output(&mut self.stdout, command.arguments().join(" ").as_str())
+            }
             CommandType::Type => {
-                let command = &self.command.arguments().join(" ");
+                let command = &command.arguments().join(" ");
 
                 if BUILTINS.contains(&command.as_str()) {
                     println_output(
@@ -186,7 +84,7 @@ impl Shell {
                 Err(_) => println_output(&mut self.stderr, "could not retreive working directory"),
             },
             CommandType::Cd => {
-                let argument = self.command.arguments().join(" ");
+                let argument = command.arguments().join(" ");
                 let path = match argument == "~" {
                     true => env::var("HOME").unwrap(),
                     false => argument.clone(),
@@ -199,10 +97,10 @@ impl Shell {
                     );
                 }
             }
-            CommandType::External(command) => {
+            CommandType::External(command_name) => {
                 let mut executable = None;
                 for path in env::split_paths(&self.path) {
-                    let exe_path = path.join(&command);
+                    let exe_path = path.join(&command_name);
                     if exe_path.exists() {
                         executable = Some(exe_path)
                     }
@@ -210,8 +108,8 @@ impl Shell {
 
                 match executable {
                     Some(_) => {
-                        let output = Command::new(command)
-                            .args(self.command.arguments().clone())
+                        let output = process::Command::new(command_name)
+                            .args(command.arguments().clone())
                             .output()
                             .expect("Unable to run command");
                         print_output(&mut self.stdout, &String::from_utf8_lossy(&output.stdout));
@@ -219,14 +117,12 @@ impl Shell {
                     }
                     None => println_output(
                         &mut self.stderr,
-                        format!("{}: command not found", command).as_str(),
+                        format!("{}: command not found", command_name).as_str(),
                     ),
                 }
             }
             CommandType::None => {}
         }
-
-        self.command = ShellCommand::none();
     }
 }
 
