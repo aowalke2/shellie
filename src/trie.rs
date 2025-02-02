@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, env, fs};
 
 #[derive(Default, Debug)]
 struct TrieNode {
@@ -53,7 +53,26 @@ impl Trie {
 }
 
 pub fn build_trie() -> Trie {
+    let path = env::var("PATH").unwrap();
+    let path_directories = env::split_paths(&path).collect::<Vec<_>>();
+    let mut executables = Vec::new();
+    for path in path_directories {
+        if let Ok(directory) = fs::read_dir(path) {
+            for entry in directory {
+                if let Ok(entry) = entry {
+                    if entry.metadata().unwrap().is_file() {
+                        executables.push(entry.file_name().into_string().unwrap());
+                    }
+                }
+            }
+        }
+    }
+
     let mut trie = Trie::new();
+    for executable in executables {
+        trie.insert(&executable);
+    }
+
     trie.insert("echo");
     trie.insert("exit");
     trie

@@ -41,7 +41,10 @@ pub fn handle_input(trie: &Trie) -> String {
 
     for key in io::stdin().keys() {
         match key.unwrap() {
-            Key::Ctrl('c') => process::exit(0),
+            Key::Ctrl('c') => {
+                stdout.suspend_raw_mode().unwrap();
+                process::exit(0)
+            }
             Key::Backspace => {
                 let cursor_position = stdout.cursor_pos().unwrap();
                 if cursor_position.0 == 3 {
