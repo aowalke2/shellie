@@ -38,6 +38,7 @@ fn main() {
 pub fn handle_input(trie: &Trie) -> String {
     let mut stdout = io::stdout().into_raw_mode().unwrap();
     let mut input: Vec<char> = Vec::new();
+    let mut bell_rung = false;
 
     for key in io::stdin().keys() {
         match key.unwrap() {
@@ -62,24 +63,47 @@ pub fn handle_input(trie: &Trie) -> String {
                 }
 
                 let prefix = input.iter().collect::<String>();
-                let suggestions = trie.search(&prefix);
-                if suggestions.is_empty() {
-                    write!(stdout, "\x07").unwrap();
-                    stdout.flush().unwrap();
-                    continue;
-                }
+                let mut suggestions = trie.search(&prefix);
+                suggestions.sort();
+                match suggestions.len() {
+                    0 => {
+                        write!(stdout, "\x07").unwrap();
+                        stdout.flush().unwrap();
+                        continue;
+                    }
+                    1 => {
+                        write!(
+                            stdout,
+                            "{}{}$ {} ",
+                            clear::CurrentLine,
+                            cursor::Left(input.len() as u16 + 2),
+                            suggestions[0]
+                        )
+                        .unwrap();
+                        input = suggestions[0].chars().collect();
+                        input.push(' ');
+                        stdout.flush().unwrap();
+                    }
+                    _ => {
+                        if bell_rung {
+                            bell_rung = false;
+                            write!(
+                                stdout,
+                                "\r\n{}\r\n$ {}",
+                                suggestions.join("  "),
+                                input.iter().collect::<String>()
+                            )
+                            .unwrap();
+                            stdout.flush().unwrap();
+                            continue;
+                        }
 
-                write!(
-                    stdout,
-                    "{}{}$ {} ",
-                    clear::CurrentLine,
-                    cursor::Left(input.len() as u16 + 2),
-                    suggestions[0]
-                )
-                .unwrap();
-                input = suggestions[0].chars().collect();
-                input.push(' ');
-                stdout.flush().unwrap();
+                        bell_rung = true;
+                        write!(stdout, "\x07").unwrap();
+                        stdout.flush().unwrap();
+                        continue;
+                    }
+                }
             }
             Key::Char('\n') => {
                 write!(stdout, "\r\n").unwrap();
