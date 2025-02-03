@@ -12,7 +12,7 @@ use termion::{
     input::TermRead,
     raw::IntoRawMode,
 };
-use trie::{build_trie, Trie};
+use trie::{build_trie, longest_common_prefix, Trie};
 
 pub mod command;
 pub mod shell;
@@ -65,6 +65,25 @@ pub fn handle_input(trie: &Trie) -> String {
                 let prefix = input.iter().collect::<String>();
                 let mut suggestions = trie.search(&prefix);
                 suggestions.sort();
+                let mut lcp = longest_common_prefix(&suggestions);
+                if lcp.len() > input.len() {
+                    if suggestions.len() == 1 {
+                        lcp.push(' ');
+                    }
+
+                    write!(
+                        stdout,
+                        "{}{}$ {}",
+                        clear::CurrentLine,
+                        cursor::Left(input.len() as u16 + 2),
+                        lcp
+                    )
+                    .unwrap();
+                    input = lcp.chars().collect();
+                    stdout.flush().unwrap();
+                    continue;
+                }
+
                 match suggestions.len() {
                     0 => {
                         write!(stdout, "\x07").unwrap();

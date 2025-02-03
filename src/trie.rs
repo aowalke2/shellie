@@ -1,5 +1,7 @@
 use std::{collections::HashMap, env, fs};
 
+use crate::shell::BUILTINS;
+
 #[derive(Default, Debug)]
 struct TrieNode {
     end_of_word: bool,
@@ -73,7 +75,25 @@ pub fn build_trie() -> Trie {
         trie.insert(&executable);
     }
 
-    trie.insert("echo");
-    trie.insert("exit");
+    for builtin in BUILTINS {
+        trie.insert(&builtin);
+    }
     trie
+}
+
+pub fn longest_common_prefix(suggestions: &Vec<String>) -> String {
+    if suggestions.is_empty() {
+        return String::new();
+    }
+
+    let mut prefix = suggestions[0].clone();
+    for s in suggestions.iter().skip(1) {
+        while !s.starts_with(&prefix) {
+            if prefix.is_empty() {
+                break;
+            }
+            prefix.pop();
+        }
+    }
+    prefix
 }
